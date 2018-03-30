@@ -21,7 +21,8 @@
     <script src="TemplateData/UnityProgress.js"></script>  
     <script src="Build/UnityLoader.js"></script>
     <script>
-      console.log(window.screen);
+      console.log(window.innerWidth);
+      console.log(window.innerHeight);
     </script>
     <script>
       var gameInstance = UnityLoader.instantiate("gameContainer", "Build/IkiroTouya.json", {onProgress: UnityProgress});
@@ -29,7 +30,7 @@
   </head>
   <body>
     <div class="webgl-content">
-      <div id="gameContainer" style="width: 960px; height: 600px"></div>
+      <div id="gameContainer" style="max-width: 960px; max-height: 600px"></div>
       <div class="footer">
         <div class="webgl-logo"></div>
         <div class="fullscreen" onclick="gameInstance.SetFullscreen(1)"></div>

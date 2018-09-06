@@ -1,0 +1,3 @@
+[submodule "nippo"]
+	path = nippo
+	url = https://github.com/pandaman64/nippo.git

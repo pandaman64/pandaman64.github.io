@@ -1,3 +1,3 @@
-[submodule "nippo_src"]
-	path = nippo_src
-	url = https://github.com/mt-caret/nippo_src.git
+[submodule "nippo"]
+	path = nippo
+	url = https://github.com/pandaman64/nippo.git

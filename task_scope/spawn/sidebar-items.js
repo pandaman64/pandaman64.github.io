@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["spawn","Creates a future that spawns the given task in the current scope."]],"struct":[["SpawnFuture","A future that spawns the given future on the first poll."]]});

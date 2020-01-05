@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["scope","Create a new task scope."]],"struct":[["ScopeFuture","A future that manages a scope."]]});

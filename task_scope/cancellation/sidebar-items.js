@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["cancellation","Creates a future that checks the current cancellation status."]],"struct":[["Cancellation","Future for checking the current cancellation status (graceful, forced)."]]});

@@ -1,0 +1,72 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `task_scope` crate."><meta name="keywords" content="rust, rustlang, rust-lang, task_scope"><title>task_scope - Rust</title><link rel="stylesheet" type="text/css" href="../normalize.css"><link rel="stylesheet" type="text/css" href="../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../dark.css"><link rel="stylesheet" type="text/css" href="../light.css" id="themeStyle"><script src="../storage.js"></script><noscript><link rel="stylesheet" href="../noscript.css"></noscript><link rel="shortcut icon" href="../favicon.ico"><style type="text/css">#crate-search{background-image:url("../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../task_scope/index.html'><div class='logo-container'><img src='../rust-logo.png' alt='logo'></div></a><p class='location'>Crate task_scope</p><div class="sidebar-elems"><a id='all-types' href='all.html'><p>See all task_scope's items</p></a><div class="block items"><ul><li><a href="#reexports">Re-exports</a></li><li><a href="#modules">Modules</a></li><li><a href="#enums">Enums</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'task_scope', ty: 'mod', relpath: '../'};</script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../theme.js"></script><nav class="sub"><form class="search-form js-only"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><a id="settings-menu" href="../settings.html"><img src="../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><h1 class='fqn'><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../src/task_scope/lib.rs.html#1-153' title='goto source code'>[src]</a></span><span class='in-band'>Crate <a class="mod" href=''>task_scope</a></span></h1><div class='docblock'><p>A runtime extension for supporting Structured Concurrency with task spawning.</p>
+<h1 id="what-is-strucutured-concurrency" class="section-header"><a href="#what-is-strucutured-concurrency">What is Strucutured Concurrency?</a></h1>
+<p><a href="https://en.wikipedia.org/wiki/Structured_concurrency">Structured Concurrency</a> is a programming paradigm that lets asynchronous operations run only
+within certain scopes so that they form an operation stack like a regular function call stack.
+As the parent operation waits until all children complete, Structured Concurrency helps local
+reasoning of concurrent programs.</p>
+<h1 id="out-of-task-concurrency-considered-harmful" class="section-header"><a href="#out-of-task-concurrency-considered-harmful">Out-of-task concurrency considered harmful</a></h1>
+<p>Most of the asynchronous programs are composed of <code>async</code> functions and <em>in-task</em> concurrency
+primitives such as <code>select</code> and <code>join</code>, and this makes such futures automatically
+well-structured. As &quot;futures do nothing unless polled,&quot; executions of inner (child) operations
+are very explicit (usually at the point of <code>await</code>s). Moreover, canceling a future is done by
+dropping it, which will reclaim resources used for the operation, including the inner futures.
+This drop-chain propagates the cancellation to the very end of the operation stack.</p>
+<p><em>Out-of-task</em> concurrencies such as <code>spawn</code>, however, breaks the structure. They allow us to
+start a new execution unit that can escape from the parent stack. Although frameworks provide a
+way to join on the spawned task, they don't propagate cancellation properly. If you drop the
+spawning task, the spawned task may outlive the parent indefinitely.</p>
+<p><code>task_scope</code> is designed to offer a <a href="../task_scope/spawn/fn.spawn.html"><code>spawn</code></a> function that properly respects cancellation.
+<a href="../task_scope/scope/fn.scope.html"><code>scope</code></a> function delimits a lifetime within which inner tasks are allowed to run. If you
+issue a graceful cancellation or drop the scope, the runtime delivers a cancellation signal to all
+the child tasks.</p>
+<h1 id="cancellation-points" class="section-header"><a href="#cancellation-points">Cancellation points</a></h1>
+<p><code>task_scope</code> requires the tasks to pass through cancellation points regularly to work effectively.
+Consider the following (contrived) example:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered">
+<span class="kw">use</span> <span class="ident">tokio</span>::<span class="ident">io</span>::<span class="kw-2">*</span>;
+
+<span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">read</span> <span class="op">=</span> <span class="ident">repeat</span>(<span class="number">42</span>); <span class="comment">// very fast input</span>
+<span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">write</span> <span class="op">=</span> <span class="ident">sink</span>(); <span class="comment">// very fast output</span>
+
+<span class="ident">copy</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">read</span>, <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">write</span>).<span class="kw">await</span>.<span class="ident">unwrap</span>();</pre></div>
+<p>This program is virtually running into an infinite loop because <code>read</code> and <code>write</code> never
+terminate. To make matters worse, this loop cannot be canceled from the outside because the
+I/O operations always succeed, and <code>copy</code> function tries to continue as much as possible.
+Therefore, the spawned task must cooperatively check for cancellation or yield the execution
+regularly in a loop to preserve the well-structuredness.</p>
+<p><code>task_scope</code> provides a convenience function <a href="../task_scope/cancelable/fn.cancelable.html"><code>cancelable</code></a> to handle cancellation
+automatically. It wraps the given <code>Future</code>/<code>AsyncRead</code>/<code>AsyncWrite</code> and checks for cancellation
+(graceful or forced) before proceeding with the inner computation. The example above will look
+like:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered">
+<span class="kw">use</span> <span class="ident">futures</span>::<span class="ident">pin_mut</span>;
+<span class="kw">use</span> <span class="ident">tokio</span>::<span class="ident">io</span>::<span class="kw-2">*</span>;
+
+<span class="kw">use</span> <span class="ident">task_scope</span>::<span class="ident">cancelable</span>;
+
+<span class="kw">let</span> <span class="ident">read</span> <span class="op">=</span> <span class="ident">cancelable</span>(<span class="ident">repeat</span>(<span class="number">42</span>)); <span class="comment">// very fast, but cancelable input</span>
+<span class="macro">pin_mut</span><span class="macro">!</span>(<span class="ident">read</span>); <span class="comment">// needed for Unpin bound of copy</span>
+<span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">write</span> <span class="op">=</span> <span class="ident">sink</span>(); <span class="comment">// very fast output</span>
+
+<span class="comment">// this will terminate with an error on cancellation</span>
+<span class="ident">copy</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">read</span>, <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">write</span>).<span class="kw">await</span>.<span class="ident">unwrap</span>();</pre></div>
+<p>If the cancellation logic is more complex, you can poll <a href="../task_scope/cancellation/struct.Cancellation.html"><code>Cancellation</code></a> manually to check for
+a cancellation signal.</p>
+<h1 id="grace-period-and-mercy-period" class="section-header"><a href="#grace-period-and-mercy-period">Grace period and mercy period</a></h1>
+<p><code>task_scope</code> supports two modes of cancellation. Graceful cancellation and forced cancellation.</p>
+<p>You can initiate a graceful cancellation by calling <a href="../task_scope/scope/struct.ScopeFuture.html#method.cancel"><code>cancel</code></a> method of the scope. This
+notifies and gives a &quot;grace period&quot; to tasks in the scope so that they can start their
+cancellation. The scope waits for all the tasks to complete as usual.</p>
+<p>A forced cancellation is propagated to tasks when the scope is dropped, or <a href="../task_scope/scope/struct.ScopeFuture.html#method.force_cancel"><code>force_cancel</code></a> is
+called. Given that canceling a long-running is really hard as shown above, the canceled tasks
+are given to a &quot;mercy period.&quot; The tasks can continue their execution until they yield the
+execution next time, and then the runtime will automatically cancel the task. The tasks should
+shorten the mercy period as short as possible because it's technically breaking the program's
+concurrency structure (a child is outliving the dropped parent).</p>
+</div><h2 id='reexports' class='section-header'><a href="#reexports">Re-exports</a></h2>
+<table><tr><td><code>pub use cancelable::<a class="fn" href="../task_scope/cancelable/fn.cancelable.html" title="fn task_scope::cancelable::cancelable">cancelable</a>;</code></td></tr><tr><td><code>pub use cancelable::<a class="struct" href="../task_scope/cancelable/struct.Cancelable.html" title="struct task_scope::cancelable::Cancelable">Cancelable</a>;</code></td></tr><tr><td><code>pub use cancellation::<a class="fn" href="../task_scope/cancellation/fn.cancellation.html" title="fn task_scope::cancellation::cancellation">cancellation</a>;</code></td></tr><tr><td><code>pub use cancellation::<a class="struct" href="../task_scope/cancellation/struct.Cancellation.html" title="struct task_scope::cancellation::Cancellation">Cancellation</a>;</code></td></tr><tr><td><code>pub use scope::<a class="fn" href="../task_scope/scope/fn.scope.html" title="fn task_scope::scope::scope">scope</a>;</code></td></tr><tr><td><code>pub use spawn::<a class="fn" href="../task_scope/spawn/fn.spawn.html" title="fn task_scope::spawn::spawn">spawn</a>;</code></td></tr></table><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table><tr class='module-item'><td><a class="mod" href="cancelable/index.html" title='task_scope::cancelable mod'>cancelable</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="cancellation/index.html" title='task_scope::cancellation mod'>cancellation</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="handle/index.html" title='task_scope::handle mod'>handle</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="scope/index.html" title='task_scope::scope mod'>scope</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="spawn/index.html" title='task_scope::spawn mod'>spawn</a></td><td class='docblock-short'></td></tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table><tr class='module-item'><td><a class="enum" href="enum.Canceled.html" title='task_scope::Canceled enum'>Canceled</a></td><td class='docblock-short'><p>The error type for cancellation.</p>
+</td></tr></table></section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../";window.currentCrate = "task_scope";</script><script src="../aliases.js"></script><script src="../main.js"></script><script defer src="../search-index.js"></script></body></html>
